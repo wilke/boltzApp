@@ -1,0 +1,98 @@
+# Dockerfile for Boltz - Biomolecular Interaction Prediction
+# Supports both GPU (CUDA) and CPU installations
+
+ARG CUDA_VERSION=12.1.0
+ARG PYTHON_VERSION=3.11
+
+# Use NVIDIA CUDA base image for GPU support
+FROM nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu22.04 AS gpu
+
+# Re-declare ARG to make it available in this stage
+ARG PYTHON_VERSION=3.11
+
+# Set non-interactive mode for apt
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
+# Install Python and system dependencies
+RUN apt-get update && apt-get install -y \
+    software-properties-common \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y \
+    python${PYTHON_VERSION} \
+    python${PYTHON_VERSION}-venv \
+    python${PYTHON_VERSION}-dev \
+    python3-pip \
+    git \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set Python 3.11 as default
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python${PYTHON_VERSION} 1 \
+    && update-alternatives --install /usr/bin/python python /usr/bin/python${PYTHON_VERSION} 1 \
+    && python3 -m pip install --upgrade pip setuptools wheel
+
+WORKDIR /app
+
+# Copy repository contents
+COPY . /app/
+
+# Install Boltz with CUDA support
+RUN pip3 install --no-cache-dir -e .[cuda]
+
+# Create directory for data and outputs
+RUN mkdir -p /data /output
+
+# Set environment variables
+ENV BOLTZ_CACHE=/root/.boltz
+ENV PYTHONUNBUFFERED=1
+
+# Working directory for user data
+WORKDIR /data
+
+# Entry point is the boltz CLI
+ENTRYPOINT ["boltz"]
+CMD ["--help"]
+
+
+# CPU-only variant
+FROM python:${PYTHON_VERSION}-slim AS cpu
+
+# Re-declare ARG to make it available in this stage
+ARG PYTHON_VERSION=3.11
+
+# Set non-interactive mode for apt
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy repository contents
+COPY . /app/
+
+# Install Boltz without CUDA support
+RUN pip install --no-cache-dir -e .
+
+# Create directory for data and outputs
+RUN mkdir -p /data /output
+
+# Set environment variables
+ENV BOLTZ_CACHE=/root/.boltz
+ENV PYTHONUNBUFFERED=1
+
+# Working directory for user data
+WORKDIR /data
+
+# Entry point is the boltz CLI
+ENTRYPOINT ["boltz"]
+CMD ["--help"]
+
+
+# Default to GPU build
+FROM gpu AS default
