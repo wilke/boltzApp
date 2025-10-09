@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  boltz-gpu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: gpu
+    image: boltz:latest-gpu
+    container_name: boltz-gpu
+    volumes:
+      - ./data:/data
+      - ./output:/output
+      - boltz-cache:/root/.boltz
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      - BOLTZ_CACHE=/root/.boltz
+    command: --help
+
+  boltz-cpu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: cpu
+    image: boltz:latest-cpu
+    container_name: boltz-cpu
+    volumes:
+      - ./data:/data
+      - ./output:/output
+      - boltz-cache:/root/.boltz
+    environment:
+      - BOLTZ_CACHE=/root/.boltz
+    command: --help
+
+volumes:
+  boltz-cache:
