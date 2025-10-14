@@ -70,16 +70,15 @@ RUN apt-get update && apt-get install -y \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
+# Clone specific version of Boltz
+RUN git clone --branch v2.2.1 https://github.com/jwohlwend/boltz /boltz 
+WORKDIR /boltz
+# Install Boltz with CUDA support
+RUN pip3 install --no-cache-dir -e .
 
-# Copy repository contents
-COPY . /app/
-
-# Install Boltz without CUDA support
-RUN pip install --no-cache-dir -e .
 
 # Create directory for data and outputs
-RUN mkdir -p /data /output
+RUN mkdir -p /data /output /cache
 
 # Set environment variables
 ENV BOLTZ_CACHE=/root/.boltz
