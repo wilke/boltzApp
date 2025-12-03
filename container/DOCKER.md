@@ -264,3 +264,57 @@ The BV-BRC image sets up the following environment:
 - `p3_auth` - Authentication handling
 - `seed_core` - SEED framework utilities
 - `seed_gjo` - GJO utilities
+
+---
+
+## Apptainer/Singularity
+
+For HPC deployment, build an Apptainer image from the Docker image.
+
+### Building the Apptainer Image
+
+```bash
+# From Docker image
+singularity build boltz-bvbrc.sif docker://dxkb/boltz-bvbrc:latest-gpu
+
+# Or from definition file
+singularity build boltz-bvbrc.sif boltz-bvbrc.def
+```
+
+### Running with Apptainer
+
+```bash
+# Run Boltz prediction
+singularity run --nv boltz-bvbrc.sif boltz predict input.yaml --use_msa_server
+
+# Run as BV-BRC service
+singularity run --nv boltz-bvbrc.sif App-Boltz params.json
+
+# Interactive shell
+singularity shell --nv boltz-bvbrc.sif
+
+# With bind mounts for data and cache persistence
+singularity run --nv \
+  --bind /path/to/data:/data \
+  --bind /path/to/output:/output \
+  --bind /path/to/cache:/root/.boltz \
+  boltz-bvbrc.sif boltz predict /data/input.yaml
+```
+
+### HPC Batch Job Example (Slurm)
+
+```bash
+#!/bin/bash
+#SBATCH --job-name=boltz
+#SBATCH --gres=gpu:1
+#SBATCH --mem=64G
+#SBATCH --time=4:00:00
+
+module load singularity
+
+singularity run --nv \
+  --bind $PWD/data:/data \
+  --bind $PWD/output:/output \
+  /path/to/boltz-bvbrc.sif \
+  boltz predict /data/input.yaml --use_msa_server --out_dir /output
+```
