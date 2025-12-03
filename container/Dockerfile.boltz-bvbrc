@@ -75,8 +75,12 @@ RUN mkdir -p /kb/module/service-scripts \
              /kb/module/scripts \
              /kb/module/lib
 
-# Copy app_specs (from build context)
+# Copy app_specs and service scripts (from build context)
 COPY app_specs/ /kb/module/app_specs/
+COPY service-scripts/ /kb/module/service-scripts/
+
+# Make service scripts executable
+RUN chmod +x /kb/module/service-scripts/*.pl 2>/dev/null || true
 
 # Working directory for data
 WORKDIR /data
