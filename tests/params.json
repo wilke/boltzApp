@@ -1,0 +1,8 @@
+{
+    "input_file": "/data/simple_protein.yaml",
+    "output_path": "/output",
+    "use_msa_server": true,
+    "diffusion_samples": 1,
+    "recycling_steps": 3,
+    "output_format": "mmcif"
+}

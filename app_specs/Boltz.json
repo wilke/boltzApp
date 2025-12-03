@@ -1,0 +1,118 @@
+{
+    "id": "Boltz",
+    "script": "App-Boltz",
+    "label": "Boltz Biomolecular Structure Prediction",
+    "description": "Predict biomolecular structures and binding affinities using the Boltz-2 deep learning model. Supports proteins, DNA, RNA, and small molecule ligands with state-of-the-art accuracy approaching AlphaFold3.",
+    "default_memory": "64G",
+    "default_cpu": 8,
+    "default_runtime": 7200,
+    "parameters": [
+        {
+            "id": "input_file",
+            "type": "wsfile",
+            "required": 1,
+            "label": "Input File",
+            "desc": "Input file in YAML (recommended) or FASTA format describing the biomolecular complex to predict. YAML format supports all features including constraints, templates, and affinity prediction."
+        },
+        {
+            "id": "input_format",
+            "type": "enum",
+            "enum": ["auto", "yaml", "fasta"],
+            "default": "auto",
+            "required": 0,
+            "label": "Input Format",
+            "desc": "Input file format. 'auto' detects format from file extension (.yaml/.yml or .fasta/.fa)."
+        },
+        {
+            "id": "use_msa_server",
+            "type": "bool",
+            "default": true,
+            "required": 0,
+            "label": "Use MSA Server",
+            "desc": "Automatically generate Multiple Sequence Alignments using the ColabFold MMseqs2 server. Recommended for best accuracy. Disable if providing pre-computed MSAs."
+        },
+        {
+            "id": "diffusion_samples",
+            "type": "int",
+            "default": 1,
+            "required": 0,
+            "label": "Number of Samples",
+            "desc": "Number of structure samples to generate. More samples provide diversity but increase runtime. AlphaFold3 uses 25 samples."
+        },
+        {
+            "id": "recycling_steps",
+            "type": "int",
+            "default": 3,
+            "required": 0,
+            "label": "Recycling Steps",
+            "desc": "Number of recycling iterations for structure refinement. More steps can improve accuracy. AlphaFold3 uses 10 steps."
+        },
+        {
+            "id": "sampling_steps",
+            "type": "int",
+            "default": 200,
+            "required": 0,
+            "label": "Diffusion Sampling Steps",
+            "desc": "Number of diffusion sampling steps. Higher values may improve quality but increase runtime."
+        },
+        {
+            "id": "output_format",
+            "type": "enum",
+            "enum": ["mmcif", "pdb"],
+            "default": "mmcif",
+            "required": 0,
+            "label": "Output Format",
+            "desc": "Output structure file format. mmCIF is recommended for modern tools; PDB for legacy compatibility."
+        },
+        {
+            "id": "use_potentials",
+            "type": "bool",
+            "default": false,
+            "required": 0,
+            "label": "Use Inference Potentials",
+            "desc": "Apply inference-time potentials to improve physical plausibility of predicted structures."
+        },
+        {
+            "id": "predict_affinity",
+            "type": "bool",
+            "default": false,
+            "required": 0,
+            "label": "Predict Binding Affinity",
+            "desc": "Enable binding affinity prediction for protein-ligand complexes. Requires affinity property in YAML input."
+        },
+        {
+            "id": "write_full_pae",
+            "type": "bool",
+            "default": false,
+            "required": 0,
+            "label": "Write PAE Matrix",
+            "desc": "Save the full Predicted Aligned Error (PAE) matrix as a separate file."
+        },
+        {
+            "id": "accelerator",
+            "type": "enum",
+            "enum": ["gpu", "cpu"],
+            "default": "gpu",
+            "required": 0,
+            "label": "Compute Device",
+            "desc": "Hardware accelerator to use. GPU is strongly recommended for reasonable runtimes."
+        },
+        {
+            "id": "output_path",
+            "type": "folder",
+            "required": 1,
+            "label": "Output Folder",
+            "desc": "Workspace folder where prediction results will be saved."
+        }
+    ],
+    "preflight": {
+        "cpu": 8,
+        "memory": "64G",
+        "runtime": 7200,
+        "storage": "50G",
+        "policy": {
+            "gpu": 1,
+            "gpu_type": "a100"
+        }
+    }
+}
