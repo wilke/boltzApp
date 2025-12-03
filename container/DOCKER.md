@@ -204,3 +204,63 @@ docker run --gpus all \
   boltz:latest-gpu \
   predict /data/prot.yaml --out_dir /output --use_msa_server
 ```
+
+---
+
+## BV-BRC Integration
+
+The `dxkb/boltz-bvbrc` image includes BV-BRC AppService integration for running Boltz as a BV-BRC service.
+
+### Building the BV-BRC Image
+
+```bash
+# From the repository root
+docker build --platform linux/amd64 \
+  -t dxkb/boltz-bvbrc:latest-gpu \
+  -f container/Dockerfile.boltz-bvbrc .
+```
+
+### Using Docker Compose
+
+```bash
+docker-compose up boltz-bvbrc
+```
+
+### Running as BV-BRC Service
+
+```bash
+# Run the App-Boltz service script
+docker run --gpus all \
+  -v $(pwd)/data:/data \
+  -v $(pwd)/output:/output \
+  -e P3_AUTH_TOKEN="your-token" \
+  dxkb/boltz-bvbrc:latest-gpu \
+  App-Boltz params.json
+
+# Or run boltz directly
+docker run --gpus all \
+  -v $(pwd)/data:/data \
+  -v $(pwd)/output:/output \
+  dxkb/boltz-bvbrc:latest-gpu \
+  boltz predict /data/input.yaml --use_msa_server
+```
+
+### BV-BRC Environment Variables
+
+The BV-BRC image sets up the following environment:
+
+| Variable | Value | Description |
+|----------|-------|-------------|
+| `PERL5LIB` | `/bvbrc/modules/...` | Perl library paths for BV-BRC modules |
+| `KB_TOP` | `/kb/deployment` | BV-BRC deployment directory |
+| `KB_MODULE_DIR` | `/kb/module` | Module directory containing service scripts |
+| `IN_BVBRC_CONTAINER` | `1` | Indicator for BV-BRC container environment |
+
+### Included BV-BRC Modules
+
+- `app_service` - AppScript framework
+- `Workspace` - Workspace file operations
+- `p3_core` - Core BV-BRC utilities
+- `p3_auth` - Authentication handling
+- `seed_core` - SEED framework utilities
+- `seed_gjo` - GJO utilities

@@ -38,5 +38,28 @@ services:
       - BOLTZ_CACHE=/root/.boltz
     command: --help
 
+  # BV-BRC integrated service
+  boltz-bvbrc:
+    build:
+      context: ..
+      dockerfile: container/Dockerfile.boltz-bvbrc
+    image: dxkb/boltz-bvbrc:latest-gpu
+    container_name: boltz-bvbrc
+    volumes:
+      - ./data:/data
+      - ./output:/output
+      - boltz-cache:/root/.boltz
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      - BOLTZ_CACHE=/root/.boltz
+      - IN_BVBRC_CONTAINER=1
+    command: boltz --help
+
 volumes:
   boltz-cache:
