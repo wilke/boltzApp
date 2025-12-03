@@ -1,8 +1,24 @@
 # AppService Implementation Plan: Boltz & Chai-Lab
 
 **Created**: 2025-12-02
-**Status**: Planning
+**Status**: Phase 1 Complete, Phase 2 In Progress
 **Goal**: Create BV-BRC AppServices for Boltz (biomolecular interaction prediction) and Chai-Lab (molecular structure prediction)
+
+---
+
+## Secondary Objective: GitHub Contributions
+
+Maximize meaningful GitHub contributions throughout development:
+- **Commits**: Small, atomic commits with clear messages
+- **Issues**: Document tasks, problems, and solutions as GitHub issues
+- **Pull Requests**: Create PRs for significant features
+- **Documentation**: Regular updates to docs and READMEs
+
+### Contribution Tracking
+| Date | boltzApp | ChaiApp | Total |
+|------|----------|---------|-------|
+| 2025-12-02 | 2 commits | 2 commits | 4 |
+| 2025-12-03 | TBD | TBD | TBD |
 
 ---
 
