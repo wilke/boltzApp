@@ -1,0 +1,15 @@
+# Example CWL job file for Boltz structure prediction
+# Usage: cwltool boltz.cwl boltz-job.yml
+
+input_file:
+  class: File
+  path: ../test_data/simple_protein.yaml
+
+use_msa_server: true
+diffusion_samples: 1
+recycling_steps: 3
+sampling_steps: 200
+output_format: mmcif
+write_full_pae: true
+accelerator: gpu
+output_dir: boltz_output
