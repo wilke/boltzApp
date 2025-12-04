@@ -1,0 +1,13 @@
+test_name,length,batch,total_residues,runtime_sec,peak_gpu_mem_mb,disk_mb,status
+protein_len50_batch1,50,1,50,51.018497216,3162,1,success
+protein_len100_batch1,100,1,100,53.161871673,3272,1,success
+protein_len150_batch1,150,1,150,55.407065102,3430,1,success
+protein_len200_batch1,200,1,200,55.271811096,3592,1,success
+protein_len300_batch1,300,1,300,52.982090058,4240,1,success
+protein_len400_batch1,400,1,400,59.078932851,5126,2,success
+protein_len500_batch1,500,1,500,58.680232126,6164,3,success
+protein_len50_batch2,50,2,100,50.947850811,3292,1,success
+protein_len100_batch2,100,2,200,55.893961178,3672,1,success
+protein_len200_batch2,200,2,400,56.667834338,5126,2,success
+protein_len50_batch4,50,4,200,54.410435915,3672,1,success
+protein_len100_batch4,100,4,400,56.998628488,5126,2,success

@@ -1,0 +1,4 @@
+test_name,length,batch,total_residues,runtime_sec,peak_gpu_mem_mb,disk_mb,status
+protein_len50_batch1,50,1,50,51.122894441,3162,1,success
+protein_len100_batch1,100,1,100,54.388801775,3268,1,success
+protein_len200_batch1,200,1,200,56.181189232,3592,1,success
