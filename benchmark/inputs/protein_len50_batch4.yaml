@@ -1,0 +1,14 @@
+version: 1
+sequences:
+  - protein:
+      id: A
+      sequence: FQCYRDVMELQKGRMHMWCRHLSTFGFKVKGKYEMGQLGTTHEMGTDWFS
+  - protein:
+      id: B
+      sequence: CYTIIMNTFCRISQNHHEECQCSRTQGIAPPYPLESRQTDPRDMFLWRLW
+  - protein:
+      id: C
+      sequence: RMIYMMFDCGLTHFKYIYYNNQWARYGWELDNTHLYQLYQLCPIQNTKHF
+  - protein:
+      id: D
+      sequence: AVSGLGMDFYLNNPPLEGAKLRFNMQWDVPSGGFCFDCNFMCRFGNFAKR

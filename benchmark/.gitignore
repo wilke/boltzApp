@@ -1,0 +1,14 @@
+# Benchmark output directories (contain large prediction files)
+output/
+output_precomputed/
+
+# Cached MSA files (can be regenerated)
+msa_cache/
+
+# Generated input files with MSA paths (can be regenerated)
+inputs_with_msa/
+
+# Keep results and scripts tracked
+!results/
+!*.sh
+!inputs/
