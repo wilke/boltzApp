@@ -41,6 +41,7 @@ RUN cpanm --notest \
     YAML::XS \
     Capture::Tiny \
     Text::Table \
+    REST::Client \
     && rm -rf ~/.cpanm
 
 # Create BV-BRC directory structure
