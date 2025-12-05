@@ -39,6 +39,8 @@ RUN cpanm --notest \
     File::Which \
     Template \
     YAML::XS \
+    Capture::Tiny \
+    Text::Table \
     && rm -rf ~/.cpanm
 
 # Create BV-BRC directory structure
