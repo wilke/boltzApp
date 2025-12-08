@@ -83,6 +83,9 @@ RUN mkdir -p /kb/module/service-scripts \
 COPY app_specs/ /kb/module/app_specs/
 COPY service-scripts/ /kb/module/service-scripts/
 
+# Copy AppConfig.pm for standalone deployment (not generated from template)
+COPY AppConfig.pm /bvbrc/modules/app_service/lib/Bio/KBase/AppService/AppConfig.pm
+
 # Make service scripts executable
 RUN chmod +x /kb/module/service-scripts/*.pl 2>/dev/null || true
 
