@@ -4,12 +4,13 @@
 # Build: docker build --platform linux/amd64 -t dxkb/boltz-bvbrc:latest-gpu -f Dockerfile.boltz-bvbrc .
 # Run:   docker run --gpus all -v $(pwd)/data:/data -v $(pwd)/output:/output dxkb/boltz-bvbrc:latest-gpu boltz predict /data/input.yaml
 
-FROM --platform=linux/amd64 dxkb/boltz:latest-gpu
+FROM --platform=linux/amd64 dxkb/boltz:20251204.0
 
 LABEL maintainer="BV-BRC Team"
 LABEL description="Boltz with BV-BRC AppService integration"
 LABEL version="2.0.0"
-LABEL base.image="dxkb/dev_container:cuda12-ubuntu22.04"
+LABEL base.boltz="dxkb/boltz:20251204.0"
+LABEL base.bvbrc="dxkb/dev_container:cuda12-ubuntu22.04"
 
 # Copy BV-BRC runtime AND build system from dev_container
 # - /opt/patric-common: Perl 5.40.2 runtime + 200 CPAN modules + p3 CLI tools
