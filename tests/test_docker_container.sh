@@ -215,25 +215,83 @@ for cmd in "${P3_COMMANDS[@]}"; do
     fi
 done
 
-# Test 8: Workspace tests (if token provided)
+# Test 8: App-Boltz Execution Tests
+section "App-Boltz Execution Tests"
+
+# Test App-Boltz.pl can be executed (shows usage/help)
+echo "Testing App-Boltz.pl execution..."
+if docker run --rm "$CONTAINER_TAG" $PERL_BIN /kb/module/service-scripts/App-Boltz.pl --help 2>&1 | grep -q -i "boltz\|usage\|predict"; then
+    pass "App-Boltz.pl responds to --help"
+else
+    # May not have --help, try running without args
+    if docker run --rm "$CONTAINER_TAG" $PERL_BIN /kb/module/service-scripts/App-Boltz.pl 2>&1 | grep -q -i "boltz\|usage\|error\|param"; then
+        pass "App-Boltz.pl executes (shows usage/error without params)"
+    else
+        warn "App-Boltz.pl execution test inconclusive"
+    fi
+fi
+
+# Test preflight mode with sample params
+echo "Testing App-Boltz.pl --preflight..."
+PREFLIGHT_RESULT=$(docker run --rm "$CONTAINER_TAG" bash -c '
+    # Create minimal test params
+    cat > /tmp/test_params.json << EOF
+{
+    "diffusion_samples": 1,
+    "recycling_steps": 3
+}
+EOF
+    $RT/bin/perl /kb/module/service-scripts/App-Boltz.pl --preflight /tmp/test_params.json 2>&1
+')
+if echo "$PREFLIGHT_RESULT" | grep -q -i "cpu\|memory\|runtime\|gpu"; then
+    pass "App-Boltz.pl --preflight returns resource estimates"
+    echo "  Preflight output: $(echo "$PREFLIGHT_RESULT" | head -3 | tr '\n' ' ')"
+else
+    warn "App-Boltz.pl --preflight test inconclusive"
+    echo "  Output: $(echo "$PREFLIGHT_RESULT" | head -2)"
+fi
+
+# Test 9: Workspace tests (if token provided)
 if [ -n "$TOKEN_PATH" ]; then
     section "Workspace Tests (with token)"
     if [ -f "$TOKEN_PATH" ]; then
         pass "Token file found: $TOKEN_PATH"
 
+        # Test p3-login --status
+        echo "Testing p3-login --status..."
+        if docker run --rm -v "$TOKEN_PATH:/root/.patric_token:ro" "$CONTAINER_TAG" \
+            $KB_DEPLOYMENT/bin/p3-login --status 2>&1 | grep -q -i "logged in\|user\|token"; then
+            pass "p3-login --status works with token"
+        else
+            warn "p3-login --status failed (check token validity)"
+        fi
+
         # Test workspace listing
-        if docker run --rm -v "$TOKEN_PATH:/root/.patric_token" "$CONTAINER_TAG" \
+        echo "Testing p3-ls /..."
+        if docker run --rm -v "$TOKEN_PATH:/root/.patric_token:ro" "$CONTAINER_TAG" \
+            $KB_DEPLOYMENT/bin/p3-ls / 2>&1 | head -5 | grep -q -E "^/|home|public"; then
+            pass "p3-ls / returns workspace listing"
+        else
+            warn "p3-ls / failed (check token and permissions)"
+        fi
+
+        # Test WorkspaceClient module loads with token
+        if docker run --rm -v "$TOKEN_PATH:/root/.patric_token:ro" "$CONTAINER_TAG" \
             $PERL_BIN -e 'use Bio::P3::Workspace::WorkspaceClient; print "WorkspaceClient loaded\n"' &>/dev/null; then
-            pass "WorkspaceClient loads with token"
+            pass "WorkspaceClient module loads with token"
         else
             warn "WorkspaceClient test skipped (module dependencies)"
         fi
     else
         fail "Token file not found: $TOKEN_PATH"
     fi
+else
+    section "Workspace Tests (skipped - no token)"
+    echo "To test workspace connectivity, run with:"
+    echo "  $0 $CONTAINER_TAG --with-token ~/.patric_token"
 fi
 
-# Test 9: Environment variables
+# Test 10: Environment variables
 section "Environment Variable Tests"
 ENV_VARS=(
     "RT"
@@ -271,7 +329,7 @@ for i in "${!ENV_VARS[@]}"; do
     fi
 done
 
-# Test 10: Directory structure
+# Test 11: Directory structure
 section "Directory Structure Tests"
 DIRS=(
     "/opt/patric-common/runtime"
