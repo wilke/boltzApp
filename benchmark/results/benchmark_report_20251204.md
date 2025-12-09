@@ -4,6 +4,30 @@
 **Container**: `/homes/wilke/images/boltz_latest-gpu.sif`
 **GPU**: NVIDIA H100 NVL (96GB)
 
+## Container Provenance
+
+| Component | Version | Source |
+|-----------|---------|--------|
+| Boltz | v2.2.1 | https://github.com/jwohlwend/boltz (tag v2.2.1) |
+| CUDA | 12.1.0 | nvidia/cuda:12.1.0-runtime-ubuntu22.04 |
+| Python | 3.11 | deadsnakes PPA |
+| Ubuntu | 22.04 | nvidia/cuda base image |
+| Docker image | dxkb/boltz:latest-gpu | Built from `container/Dockerfile.boltz` (--target gpu) |
+| Apptainer image | boltz_latest-gpu.sif | `singularity build boltz_latest-gpu.sif docker://dxkb/boltz:latest-gpu` |
+
+### Reproducing the Container
+
+```bash
+# Build Docker image
+cd container
+docker build -t dxkb/boltz:latest-gpu --target gpu -f Dockerfile.boltz .
+
+# Convert to Apptainer/Singularity
+singularity build boltz_latest-gpu.sif docker://dxkb/boltz:latest-gpu
+```
+
+---
+
 ## Executive Summary
 
 The Boltz Apptainer container is fully functional and produces correct biomolecular structure predictions. This report documents the runtime, memory, and disk footprint characteristics for various input sizes, comparing MSA server mode vs pre-computed MSA mode.
