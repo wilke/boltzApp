@@ -48,6 +48,15 @@ RUN for mod in app_service seed_core seed_gjo; do \
         cp -r modules/$mod/lib/* $KB_DEPLOYMENT/lib/ 2>/dev/null || true; \
     done
 
+# Install missing CPAN modules required by BV-BRC (not in dev_container base)
+# REST::Client requires IO::Socket::SSL which needs system SSL libraries
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libssl-dev \
+        zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    && $RT/bin/cpanm --notest Net::SSLeay IO::Socket::SSL LWP::Protocol::https REST::Client Class::Accessor \
+    && rm -rf ~/.cpanm
+
 # Create directories for service components
 RUN mkdir -p /kb/module/service-scripts \
              /kb/module/app_specs \
