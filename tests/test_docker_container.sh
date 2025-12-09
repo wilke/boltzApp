@@ -4,7 +4,7 @@
 #
 # Tests Docker container functionality including:
 # - Boltz CLI availability
-# - Perl module loading
+# - Perl module loading (Perl 5.40.2 from dxkb/dev_container)
 # - BV-BRC workspace connectivity (optional with token)
 # - Service script syntax
 
@@ -87,68 +87,113 @@ else
     fail "Boltz CLI not available"
 fi
 
-# Test 3: Perl availability
+# Test 3: Perl availability (using BV-BRC runtime path)
 section "Perl Tests"
-if PERL_VERSION=$(docker run --rm "$CONTAINER_TAG" perl -v 2>&1 | grep -o 'v[0-9]\+\.[0-9]\+\.[0-9]\+' | head -1); then
+RT_PATH="/opt/patric-common/runtime"
+PERL_BIN="$RT_PATH/bin/perl"
+
+if PERL_VERSION=$(docker run --rm "$CONTAINER_TAG" $PERL_BIN -v 2>&1 | grep -o 'v[0-9]\+\.[0-9]\+\.[0-9]\+' | head -1); then
     pass "Perl available ($PERL_VERSION)"
+    # Check for expected version 5.40.x
+    if echo "$PERL_VERSION" | grep -q "v5\.40"; then
+        pass "Perl version is 5.40.x (from dxkb/dev_container)"
+    else
+        warn "Perl version is $PERL_VERSION (expected 5.40.x)"
+    fi
 else
-    fail "Perl not available"
+    fail "Perl not available at $PERL_BIN"
 fi
 
-# Test 4: BV-BRC modules directory
-section "BV-BRC Module Tests"
-if docker run --rm "$CONTAINER_TAG" ls /bvbrc/modules/ &>/dev/null; then
-    pass "BV-BRC modules directory exists"
-    MODULES=$(docker run --rm "$CONTAINER_TAG" ls /bvbrc/modules/)
-    echo "  Modules found:"
-    for mod in $MODULES; do
+# Test 4: BV-BRC deployment directory
+section "BV-BRC Deployment Tests"
+KB_DEPLOYMENT="/opt/patric-common/deployment"
+
+if docker run --rm "$CONTAINER_TAG" test -d "$KB_DEPLOYMENT"; then
+    pass "BV-BRC deployment directory exists: $KB_DEPLOYMENT"
+else
+    fail "BV-BRC deployment directory missing: $KB_DEPLOYMENT"
+fi
+
+if docker run --rm "$CONTAINER_TAG" test -d "$KB_DEPLOYMENT/lib"; then
+    pass "BV-BRC lib directory exists"
+    # List some key modules
+    echo "  Key module directories:"
+    docker run --rm "$CONTAINER_TAG" ls "$KB_DEPLOYMENT/lib" 2>/dev/null | head -5 | while read mod; do
         echo "    - $mod"
     done
 else
-    fail "BV-BRC modules directory missing"
+    fail "BV-BRC lib directory missing"
 fi
 
-# Test 5: Required Perl modules
+if docker run --rm "$CONTAINER_TAG" test -d "$KB_DEPLOYMENT/bin"; then
+    pass "BV-BRC bin directory exists"
+    P3_COUNT=$(docker run --rm "$CONTAINER_TAG" ls "$KB_DEPLOYMENT/bin" 2>/dev/null | grep -c "^p3-" || echo "0")
+    echo "  p3 commands found: $P3_COUNT"
+else
+    fail "BV-BRC bin directory missing"
+fi
+
+# Test 5: Required Perl modules (using BV-BRC Perl)
 section "Perl Module Loading Tests"
 
 test_perl_module() {
     local module=$1
-    if docker run --rm "$CONTAINER_TAG" perl -e "use $module; print 'OK'" &>/dev/null; then
+    if docker run --rm "$CONTAINER_TAG" $PERL_BIN -e "use $module; print 'OK'" &>/dev/null; then
         pass "Module: $module"
     else
         fail "Module: $module (failed to load)"
     fi
 }
 
-# Core modules
+# Core modules (from dev_container runtime)
+test_perl_module "JSON"
+test_perl_module "JSON::XS"
+test_perl_module "LWP::UserAgent"
+test_perl_module "XML::LibXML"
 test_perl_module "Try::Tiny"
-test_perl_module "IPC::Run"
-test_perl_module "File::Which"
 test_perl_module "Template"
-test_perl_module "YAML::XS"
+test_perl_module "YAML"
+test_perl_module "DBI"
 
-# Issue #24 modules
+# Additional modules
 test_perl_module "Capture::Tiny"
 test_perl_module "Text::Table"
+test_perl_module "REST::Client"
+test_perl_module "Class::Accessor"
+test_perl_module "Clone"
 
-# BV-BRC modules (these may fail due to REST::Client dependency)
-warn "Testing BV-BRC modules (may have known dependencies)..."
-if docker run --rm "$CONTAINER_TAG" perl -e "use Bio::P3::Workspace::WorkspaceClient; print 'OK'" &>/dev/null; then
+# BV-BRC modules
+echo ""
+echo "Testing BV-BRC modules..."
+if docker run --rm "$CONTAINER_TAG" $PERL_BIN -e "use Bio::P3::Workspace::WorkspaceClient; print 'OK'" &>/dev/null; then
     pass "Module: Bio::P3::Workspace::WorkspaceClient"
 else
     warn "Module: Bio::P3::Workspace::WorkspaceClient (dependency issues)"
 fi
 
-if docker run --rm "$CONTAINER_TAG" perl -e "use Bio::KBase::AppService::AppScript; print 'OK'" &>/dev/null; then
+if docker run --rm "$CONTAINER_TAG" $PERL_BIN -e "use Bio::KBase::AppService::AppScript; print 'OK'" &>/dev/null; then
     pass "Module: Bio::KBase::AppService::AppScript"
 else
     warn "Module: Bio::KBase::AppService::AppScript (dependency issues)"
+fi
+
+if docker run --rm "$CONTAINER_TAG" $PERL_BIN -e "use Bio::KBase::AppService::AppConfig; print 'OK'" &>/dev/null; then
+    pass "Module: Bio::KBase::AppService::AppConfig"
+else
+    warn "Module: Bio::KBase::AppService::AppConfig (may need configuration)"
 fi
 
 # Test 6: Service script and app spec
 section "Service Script Tests"
 if docker run --rm "$CONTAINER_TAG" test -f /kb/module/service-scripts/App-Boltz.pl; then
     pass "Service script exists: /kb/module/service-scripts/App-Boltz.pl"
+
+    # Syntax check using BV-BRC Perl
+    if docker run --rm "$CONTAINER_TAG" $PERL_BIN -c /kb/module/service-scripts/App-Boltz.pl &>/dev/null; then
+        pass "Service script syntax OK"
+    else
+        warn "Service script syntax check failed (may have runtime dependencies)"
+    fi
 else
     fail "Service script missing: /kb/module/service-scripts/App-Boltz.pl"
 fi
@@ -159,50 +204,85 @@ else
     fail "App spec missing: /kb/module/app_specs/Boltz.json"
 fi
 
-# Test 7: Workspace tests (if token provided)
+# Test 7: p3 CLI tools
+section "p3 CLI Tests"
+P3_COMMANDS=("p3-login" "p3-ls" "p3-cat" "p3-cp")
+for cmd in "${P3_COMMANDS[@]}"; do
+    if docker run --rm "$CONTAINER_TAG" test -f "$KB_DEPLOYMENT/bin/$cmd"; then
+        pass "p3 command exists: $cmd"
+    else
+        fail "p3 command missing: $cmd"
+    fi
+done
+
+# Test 8: Workspace tests (if token provided)
 if [ -n "$TOKEN_PATH" ]; then
     section "Workspace Tests (with token)"
     if [ -f "$TOKEN_PATH" ]; then
         pass "Token file found: $TOKEN_PATH"
 
-        # Test workspace listing (requires proper Perl module setup)
-        warn "Workspace connectivity test requires REST::Client module"
-        warn "Skipping workspace listing test due to known dependency"
+        # Test workspace listing
+        if docker run --rm -v "$TOKEN_PATH:/root/.patric_token" "$CONTAINER_TAG" \
+            $PERL_BIN -e 'use Bio::P3::Workspace::WorkspaceClient; print "WorkspaceClient loaded\n"' &>/dev/null; then
+            pass "WorkspaceClient loads with token"
+        else
+            warn "WorkspaceClient test skipped (module dependencies)"
+        fi
     else
         fail "Token file not found: $TOKEN_PATH"
     fi
 fi
 
-# Test 8: Environment variables
+# Test 9: Environment variables
 section "Environment Variable Tests"
 ENV_VARS=(
-    "PERL5LIB"
+    "RT"
+    "KB_DEPLOYMENT"
     "KB_TOP"
-    "KB_RUNTIME"
+    "PERL5LIB"
     "KB_MODULE_DIR"
     "IN_BVBRC_CONTAINER"
 )
 
-for var in "${ENV_VARS[@]}"; do
+EXPECTED_VALUES=(
+    "/opt/patric-common/runtime"
+    "/opt/patric-common/deployment"
+    "/opt/patric-common/deployment"
+    ""
+    "/kb/module"
+    "1"
+)
+
+for i in "${!ENV_VARS[@]}"; do
+    var="${ENV_VARS[$i]}"
+    expected="${EXPECTED_VALUES[$i]}"
+
     if docker run --rm "$CONTAINER_TAG" bash -c "[ -n \"\$$var\" ]" &>/dev/null; then
         VALUE=$(docker run --rm "$CONTAINER_TAG" bash -c "echo \$$var")
         pass "Environment variable set: $var"
         echo "  Value: $VALUE"
+
+        # Check expected value if specified
+        if [ -n "$expected" ] && [ "$VALUE" != "$expected" ]; then
+            warn "  Expected: $expected"
+        fi
     else
         fail "Environment variable not set: $var"
     fi
 done
 
-# Test 9: Directory structure
+# Test 10: Directory structure
 section "Directory Structure Tests"
 DIRS=(
-    "/bvbrc/modules"
-    "/kb/deployment"
+    "/opt/patric-common/runtime"
+    "/opt/patric-common/runtime/bin"
+    "/opt/patric-common/deployment"
+    "/opt/patric-common/deployment/bin"
+    "/opt/patric-common/deployment/lib"
+    "/build/dev_container"
     "/kb/module"
     "/kb/module/service-scripts"
     "/kb/module/app_specs"
-    "/kb/module/scripts"
-    "/kb/module/lib"
     "/data"
 )
 

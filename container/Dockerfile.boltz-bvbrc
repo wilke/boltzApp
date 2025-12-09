@@ -1,5 +1,5 @@
 # BV-BRC Runtime Layer for Boltz
-# Adds Perl, BV-BRC modules, and AppService support on top of base Boltz image
+# Uses dxkb/dev_container:cuda12-ubuntu22.04 for standardized BV-BRC runtime
 #
 # Build: docker build --platform linux/amd64 -t dxkb/boltz-bvbrc:latest-gpu -f Dockerfile.boltz-bvbrc .
 # Run:   docker run --gpus all -v $(pwd)/data:/data -v $(pwd)/output:/output dxkb/boltz-bvbrc:latest-gpu boltz predict /data/input.yaml
@@ -8,70 +8,44 @@ FROM --platform=linux/amd64 dxkb/boltz:latest-gpu
 
 LABEL maintainer="BV-BRC Team"
 LABEL description="Boltz with BV-BRC AppService integration"
-LABEL version="1.0.0"
+LABEL version="2.0.0"
+LABEL base.image="dxkb/dev_container:cuda12-ubuntu22.04"
 
-# Install Perl and system dependencies for BV-BRC
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    perl \
-    cpanminus \
-    libfindbin-libs-perl \
-    libjson-perl \
-    libjson-xs-perl \
-    libwww-perl \
-    libio-socket-ssl-perl \
-    libfile-slurp-perl \
-    libdata-dumper-simple-perl \
-    libgetopt-long-descriptive-perl \
-    liburi-perl \
-    liblwp-protocol-https-perl \
-    libhttp-message-perl \
-    libtext-csv-perl \
-    libdbi-perl \
-    make \
-    git \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+# Copy BV-BRC runtime AND build system from dev_container
+# - /opt/patric-common: Perl 5.40.2 runtime + 200 CPAN modules + p3 CLI tools
+# - /build/dev_container: BV-BRC build system for deploying app code
+COPY --from=dxkb/dev_container:cuda12-ubuntu22.04 /opt/patric-common /opt/patric-common
+COPY --from=dxkb/dev_container:cuda12-ubuntu22.04 /build/dev_container /build/dev_container
 
-# Install additional Perl modules via cpanm
-RUN cpanm --notest \
-    Try::Tiny \
-    IPC::Run \
-    File::Which \
-    Template \
-    YAML::XS \
-    Capture::Tiny \
-    Text::Table \
-    REST::Client \
-    Clone \
-    && rm -rf ~/.cpanm
+# Standard BV-BRC Environment Variables
+ENV RT=/opt/patric-common/runtime
+ENV KB_DEPLOYMENT=/opt/patric-common/deployment
+ENV KB_TOP=/opt/patric-common/deployment
+ENV PERL5LIB=$KB_DEPLOYMENT/lib:$RT/lib/perl5
+ENV PATH=$KB_DEPLOYMENT/bin:$RT/bin:$PATH
 
-# Create BV-BRC directory structure
-RUN mkdir -p /bvbrc/modules /kb/deployment /kb/module
+# App-specific environment
+ENV KB_MODULE_DIR=/kb/module
+ENV IN_BVBRC_CONTAINER=1
 
-# Clone BV-BRC core modules (shallow clone for smaller image)
-WORKDIR /bvbrc/modules
-
-RUN git clone --depth 1 https://github.com/BV-BRC/p3_core.git && \
-    git clone --depth 1 https://github.com/BV-BRC/Workspace.git && \
-    git clone --depth 1 https://github.com/BV-BRC/app_service.git && \
-    git clone --depth 1 https://github.com/BV-BRC/p3_auth.git && \
+# Add additional BV-BRC modules needed for AppService (not in minimal CLI set)
+# The dev_container base only includes p3_auth, p3_cli, p3_core, Workspace
+WORKDIR /build/dev_container/modules
+RUN git clone --depth 1 https://github.com/BV-BRC/app_service.git && \
     git clone --depth 1 https://github.com/TheSEED/seed_core.git && \
     git clone --depth 1 https://github.com/TheSEED/seed_gjo.git
 
-# Set up Perl library paths
-ENV PERL5LIB=/bvbrc/modules/app_service/lib:\
-/bvbrc/modules/Workspace/lib:\
-/bvbrc/modules/p3_core/lib:\
-/bvbrc/modules/p3_auth/lib:\
-/bvbrc/modules/seed_core/lib:\
-/bvbrc/modules/seed_gjo/lib:\
-/kb/module/lib
+# Build additional modules using dev_container build system
+WORKDIR /build/dev_container
+RUN . ./user-env.sh && \
+    cd modules/app_service && make -k || true && \
+    cd ../seed_core && make -k || true && \
+    cd ../seed_gjo && make -k || true
 
-# BV-BRC environment variables
-ENV KB_TOP=/kb/deployment
-ENV KB_RUNTIME=/usr
-ENV KB_MODULE_DIR=/kb/module
-ENV IN_BVBRC_CONTAINER=1
+# Copy module libs to deployment
+RUN for mod in app_service seed_core seed_gjo; do \
+        cp -r modules/$mod/lib/* $KB_DEPLOYMENT/lib/ 2>/dev/null || true; \
+    done
 
 # Create directories for service components
 RUN mkdir -p /kb/module/service-scripts \
@@ -83,8 +57,8 @@ RUN mkdir -p /kb/module/service-scripts \
 COPY app_specs/ /kb/module/app_specs/
 COPY service-scripts/ /kb/module/service-scripts/
 
-# Copy AppConfig.pm for standalone deployment (not generated from template)
-COPY AppConfig.pm /bvbrc/modules/app_service/lib/Bio/KBase/AppService/AppConfig.pm
+# Copy AppConfig.pm for standalone deployment to standard BV-BRC location
+COPY container/AppConfig.pm $KB_DEPLOYMENT/lib/Bio/KBase/AppService/AppConfig.pm
 
 # Make service scripts executable
 RUN chmod +x /kb/module/service-scripts/*.pl 2>/dev/null || true
@@ -92,11 +66,11 @@ RUN chmod +x /kb/module/service-scripts/*.pl 2>/dev/null || true
 # Working directory for data
 WORKDIR /data
 
-# Create entrypoint script
+# Create entrypoint script using BV-BRC Perl runtime
 RUN echo '#!/bin/bash\n\
 case "$1" in\n\
     App-Boltz*)\n\
-        exec perl /kb/module/service-scripts/App-Boltz.pl "${@:2}"\n\
+        exec $RT/bin/perl /kb/module/service-scripts/App-Boltz.pl "${@:2}"\n\
         ;;\n\
     boltz)\n\
         shift\n\

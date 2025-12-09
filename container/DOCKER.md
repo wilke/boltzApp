@@ -209,7 +209,7 @@ docker run --gpus all \
 
 ## BV-BRC Integration
 
-The `dxkb/boltz-bvbrc` image includes BV-BRC AppService integration for running Boltz as a BV-BRC service.
+The `dxkb/boltz-bvbrc` image includes BV-BRC AppService integration for running Boltz as a BV-BRC service. It uses `dxkb/dev_container:cuda12-ubuntu22.04` as the base layer for standardized BV-BRC runtime (Perl 5.40.2 + 200 CPAN modules).
 
 ### Building the BV-BRC Image
 
@@ -218,6 +218,15 @@ The `dxkb/boltz-bvbrc` image includes BV-BRC AppService integration for running 
 docker build --platform linux/amd64 \
   -t dxkb/boltz-bvbrc:latest-gpu \
   -f container/Dockerfile.boltz-bvbrc .
+```
+
+### Container Architecture
+
+```
+dxkb/boltz:latest-gpu           # Base: Python 3.11 + Boltz v2.2.1 + CUDA 12.1
+  └── dxkb/dev_container overlay  # Perl 5.40.2 + 200 CPAN modules (via COPY --from)
+      └── app_service, seed_core, seed_gjo modules
+          └── App-Boltz.pl service script
 ```
 
 ### Using Docker Compose
@@ -247,23 +256,32 @@ docker run --gpus all \
 
 ### BV-BRC Environment Variables
 
-The BV-BRC image sets up the following environment:
+The BV-BRC image sets up the following environment (standardized from `dxkb/dev_container`):
 
 | Variable | Value | Description |
 |----------|-------|-------------|
-| `PERL5LIB` | `/bvbrc/modules/...` | Perl library paths for BV-BRC modules |
-| `KB_TOP` | `/kb/deployment` | BV-BRC deployment directory |
+| `RT` | `/opt/patric-common/runtime` | BV-BRC Perl runtime (5.40.2) |
+| `KB_DEPLOYMENT` | `/opt/patric-common/deployment` | BV-BRC deployment directory |
+| `KB_TOP` | `/opt/patric-common/deployment` | BV-BRC top-level directory |
+| `PERL5LIB` | `$KB_DEPLOYMENT/lib:$RT/lib/perl5` | Perl library paths |
+| `PATH` | `$KB_DEPLOYMENT/bin:$RT/bin:$PATH` | Includes p3 CLI tools |
 | `KB_MODULE_DIR` | `/kb/module` | Module directory containing service scripts |
 | `IN_BVBRC_CONTAINER` | `1` | Indicator for BV-BRC container environment |
 
 ### Included BV-BRC Modules
 
-- `app_service` - AppScript framework
-- `Workspace` - Workspace file operations
-- `p3_core` - Core BV-BRC utilities
+**From dxkb/dev_container base (minimal CLI set):**
 - `p3_auth` - Authentication handling
+- `p3_cli` - CLI commands (p3-ls, p3-cat, p3-cp, etc.)
+- `p3_core` - Core BV-BRC utilities
+- `Workspace` - Workspace file operations
+
+**Added for AppService support:**
+- `app_service` - AppScript framework
 - `seed_core` - SEED framework utilities
 - `seed_gjo` - GJO utilities
+
+**Note:** The base image includes 200+ CPAN modules pre-installed (JSON, LWP, XML::LibXML, DBI, Moose, etc.)
 
 ---
 
