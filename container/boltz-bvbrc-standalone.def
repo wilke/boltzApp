@@ -1,0 +1,224 @@
+Bootstrap: docker
+From: nvidia/cuda:12.1.0-runtime-ubuntu22.04
+
+%labels
+    Author BV-BRC Team
+    Application Boltz
+    Version 2.2.1
+    Description Boltz biomolecular structure prediction with BV-BRC AppService integration (standalone build)
+
+%help
+    Boltz BV-BRC Service Container (Standalone Build)
+    ==================================================
+
+    This container provides Boltz-2 biomolecular structure prediction
+    integrated with the BV-BRC AppService framework.
+
+    Built entirely from base CUDA image - no Docker Hub dependency.
+
+    Features:
+    - Boltz-2 structure prediction (proteins, DNA, RNA, ligands)
+    - Binding affinity prediction
+    - MSA server integration
+    - BV-BRC workspace integration
+
+    Usage Examples:
+
+    # Run Boltz directly
+    singularity run --nv container.sif boltz predict input.yaml --use_msa_server
+
+    # Run as BV-BRC service
+    singularity run --nv container.sif App-Boltz params.json
+
+    # Interactive shell
+    singularity shell --nv container.sif
+
+    Environment:
+    - GPU required for reasonable performance
+    - Model weights cached in /root/.boltz (bind mount for persistence)
+    - Workspace files in /data
+
+%environment
+    export PERL5LIB=/bvbrc/modules/app_service/lib:/bvbrc/modules/Workspace/lib:/bvbrc/modules/p3_core/lib:/bvbrc/modules/p3_auth/lib:/bvbrc/modules/seed_core/lib:/bvbrc/modules/seed_gjo/lib:/kb/module/lib
+    export KB_TOP=/kb/deployment
+    export KB_RUNTIME=/usr
+    export KB_MODULE_DIR=/kb/module
+    export IN_BVBRC_CONTAINER=1
+    export BOLTZ_CACHE=/root/.boltz
+    export PATH=/kb/module/scripts:/boltz:$PATH
+    export PYTHONUNBUFFERED=1
+    export DEBIAN_FRONTEND=noninteractive
+    export TZ=UTC
+
+%files
+    app_specs/Boltz.json /kb/module/app_specs/Boltz.json
+    service-scripts/App-Boltz.pl /kb/module/service-scripts/App-Boltz.pl
+    container/AppConfig.pm /opt/AppConfig.pm.standalone
+
+%post
+    # Set non-interactive mode
+    export DEBIAN_FRONTEND=noninteractive
+    export TZ=UTC
+
+    # Add deadsnakes PPA manually (avoids software-properties-common which pulls in systemd)
+    apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        gnupg \
+        wget \
+        curl \
+        && echo "deb http://ppa.launchpad.net/deadsnakes/ppa/ubuntu jammy main" > /etc/apt/sources.list.d/deadsnakes.list \
+        && apt-key adv --keyserver keyserver.ubuntu.com --recv-keys F23C5A6CF475977595C89F51BA6932366A755776 \
+        && apt-get update && apt-get install -y --no-install-recommends \
+        python3.11 \
+        python3.11-venv \
+        python3.11-dev \
+        python3-pip \
+        perl \
+        cpanminus \
+        libfindbin-libs-perl \
+        libjson-perl \
+        libjson-xs-perl \
+        libwww-perl \
+        libio-socket-ssl-perl \
+        libfile-slurp-perl \
+        libdata-dumper-simple-perl \
+        libgetopt-long-descriptive-perl \
+        liburi-perl \
+        liblwp-protocol-https-perl \
+        libhttp-message-perl \
+        libtext-csv-perl \
+        libdbi-perl \
+        libclone-perl \
+        libyaml-perl \
+        libtemplate-perl \
+        make \
+        gcc \
+        git \
+        && rm -rf /var/lib/apt/lists/*
+
+    # Set Python 3.11 as default
+    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
+    update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
+    python3 -m pip install --upgrade pip setuptools wheel
+
+    # Clone and install Boltz v2.2.1
+    git clone --branch v2.2.1 https://github.com/jwohlwend/boltz /boltz
+    cd /boltz && pip3 install --no-cache-dir -e .[cuda]
+
+    # Install Perl modules via cpanm (system packages for Clone, Template, YAML)
+    cpanm --notest \
+        Try::Tiny \
+        IPC::Run \
+        File::Which \
+        Capture::Tiny \
+        Text::Table \
+        REST::Client \
+        Class::Accessor \
+        && rm -rf ~/.cpanm
+
+    # Create BV-BRC directory structure
+    mkdir -p /bvbrc/modules /kb/deployment /kb/module/service-scripts /kb/module/app_specs /kb/module/scripts /kb/module/lib
+
+    # Clone BV-BRC core modules (shallow clone for smaller image)
+    # Using retry logic to handle network timeouts
+    cd /bvbrc/modules
+
+    clone_with_retry() {
+        local url=$1
+        local max_attempts=3
+        local attempt=1
+        while [ $attempt -le $max_attempts ]; do
+            echo "Cloning $url (attempt $attempt/$max_attempts)..."
+            if git clone --depth 1 "$url"; then
+                return 0
+            fi
+            echo "Clone failed, waiting 5 seconds before retry..."
+            sleep 5
+            attempt=$((attempt + 1))
+        done
+        echo "ERROR: Failed to clone $url after $max_attempts attempts"
+        return 1
+    }
+
+    clone_with_retry https://github.com/BV-BRC/p3_core.git
+    clone_with_retry https://github.com/BV-BRC/Workspace.git
+    clone_with_retry https://github.com/BV-BRC/app_service.git
+    clone_with_retry https://github.com/BV-BRC/p3_auth.git
+    clone_with_retry https://github.com/TheSEED/seed_core.git
+    clone_with_retry https://github.com/TheSEED/seed_gjo.git
+
+    # Copy standalone AppConfig.pm (from %files staging location) to override cloned version
+    cp /opt/AppConfig.pm.standalone /bvbrc/modules/app_service/lib/Bio/KBase/AppService/AppConfig.pm
+
+    # Create directories for data
+    mkdir -p /data /output /cache
+
+    # Make service scripts executable
+    chmod +x /kb/module/service-scripts/*.pl 2>/dev/null || true
+
+    echo "Boltz BV-BRC standalone container build complete"
+
+%runscript
+    case "$1" in
+        App-Boltz*)
+            shift
+            exec perl /kb/module/service-scripts/App-Boltz.pl "$@"
+            ;;
+        boltz)
+            shift
+            exec boltz "$@"
+            ;;
+        bash|sh)
+            exec /bin/bash
+            ;;
+        *)
+            if [ -z "$1" ]; then
+                echo "Boltz BV-BRC Container (Standalone Build)"
+                echo "Usage: singularity run --nv container.sif [command]"
+                echo ""
+                echo "Commands:"
+                echo "  boltz predict <input> [options]  - Run structure prediction"
+                echo "  App-Boltz <params.json>          - Run as BV-BRC service"
+                echo "  bash                             - Interactive shell"
+                echo ""
+                echo "For help: singularity run --nv container.sif boltz --help"
+            else
+                exec "$@"
+            fi
+            ;;
+    esac
+
+%test
+    echo "Testing Boltz BV-BRC standalone container..."
+
+    # Test Python/Boltz
+    echo -n "Python: "
+    python3 --version
+
+    echo -n "Boltz: "
+    boltz --help 2>&1 | head -1 || echo "boltz command available"
+
+    # Test Perl/BV-BRC
+    echo -n "Perl: "
+    perl -v | grep version | head -1
+
+    # Test required Perl modules
+    echo "Testing Perl modules..."
+    perl -e 'use Try::Tiny; print "  Try::Tiny: OK\n"'
+    perl -e 'use Capture::Tiny; print "  Capture::Tiny: OK\n"'
+    perl -e 'use Text::Table; print "  Text::Table: OK\n"'
+    perl -e 'use REST::Client; print "  REST::Client: OK\n"'
+    perl -e 'use Class::Accessor; print "  Class::Accessor: OK\n"'
+    perl -e 'use Bio::KBase::AppService::AppConfig; print "  AppConfig: OK\n"'
+    perl -e 'use Bio::P3::Workspace::WorkspaceClient; print "  WorkspaceClient: OK\n"'
+    perl -e 'use Bio::KBase::AppService::AppScript; print "  AppScript: OK\n"'
+
+    # Test service script exists and compiles
+    echo -n "Service script syntax: "
+    perl -c /kb/module/service-scripts/App-Boltz.pl 2>&1 | grep -q "syntax OK" && echo "OK" || echo "FAILED"
+
+    # Test app specs
+    echo -n "App specs: "
+    test -f /kb/module/app_specs/Boltz.json && echo "OK" || echo "MISSING"
+
+    echo "Container tests completed"
