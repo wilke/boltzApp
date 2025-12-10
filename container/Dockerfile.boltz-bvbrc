@@ -29,22 +29,21 @@ ENV PATH=$KB_DEPLOYMENT/bin:$RT/bin:$PATH
 ENV KB_MODULE_DIR=/kb/module
 ENV IN_BVBRC_CONTAINER=1
 
-# Add additional BV-BRC modules needed for AppService (not in minimal CLI set)
-# The dev_container base only includes p3_auth, p3_cli, p3_core, Workspace
+# Add additional BV-BRC modules needed for AppService
+# dev_container now includes: p3_auth, p3_cli, p3_core, Workspace, app_service
+# Only clone seed_core and seed_gjo if needed for additional functionality
 WORKDIR /build/dev_container/modules
-RUN git clone --depth 1 https://github.com/BV-BRC/app_service.git && \
-    git clone --depth 1 https://github.com/TheSEED/seed_core.git && \
-    git clone --depth 1 https://github.com/TheSEED/seed_gjo.git
+RUN git clone --depth 1 https://github.com/TheSEED/seed_core.git 2>/dev/null || true && \
+    git clone --depth 1 https://github.com/TheSEED/seed_gjo.git 2>/dev/null || true
 
 # Build additional modules using dev_container build system
 WORKDIR /build/dev_container
 RUN . ./user-env.sh && \
-    cd modules/app_service && make -k || true && \
-    cd ../seed_core && make -k || true && \
-    cd ../seed_gjo && make -k || true
+    cd modules/seed_core && make -k 2>/dev/null || true && \
+    cd ../seed_gjo && make -k 2>/dev/null || true
 
-# Copy module libs to deployment
-RUN for mod in app_service seed_core seed_gjo; do \
+# Copy module libs to deployment (app_service already deployed by dev_container)
+RUN for mod in seed_core seed_gjo; do \
         cp -r modules/$mod/lib/* $KB_DEPLOYMENT/lib/ 2>/dev/null || true; \
     done
 
@@ -67,8 +66,9 @@ RUN mkdir -p /kb/module/service-scripts \
 COPY app_specs/ /kb/module/app_specs/
 COPY service-scripts/ /kb/module/service-scripts/
 
-# Copy AppConfig.pm for standalone deployment to standard BV-BRC location
-COPY container/AppConfig.pm $KB_DEPLOYMENT/lib/Bio/KBase/AppService/AppConfig.pm
+# AppConfig.pm is now provided by dev_container via app_service module
+# Commented out local override - uncomment if custom env var support needed
+# COPY container/AppConfig.pm $KB_DEPLOYMENT/lib/Bio/KBase/AppService/AppConfig.pm
 
 # Make service scripts executable
 RUN chmod +x /kb/module/service-scripts/*.pl 2>/dev/null || true
