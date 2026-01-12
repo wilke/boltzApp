@@ -2,6 +2,8 @@
 # GPU Acceptance Test Suite for BoltzApp
 # Target: H100 GPU with Apptainer/Singularity
 #
+# MAIN FOCUS: Testing App-Boltz.pl - the BV-BRC service script
+#
 # Usage: ./gpu_acceptance_test.sh <container.sif> [options]
 #
 # Options:
@@ -13,10 +15,15 @@
 # Tests performed:
 #   1. GPU access and CUDA detection
 #   2. Container integrity (Boltz CLI, Perl, BV-BRC modules)
-#   3. Actual Boltz predictions with test data
-#   4. Output validation
-#   5. BV-BRC service script (preflight)
-#   6. Workspace connectivity (if token provided)
+#   3. App-Boltz.pl service script execution (MAIN FOCUS)
+#      - Parameter parsing from JSON
+#      - Input file handling (local fallback mode)
+#      - Format detection (YAML/FASTA)
+#      - Boltz execution with correct flags
+#      - Output file generation
+#   4. Preflight resource estimation validation
+#   5. Workspace connectivity (if token provided)
+#   6. Direct boltz CLI comparison (optional)
 #   7. Performance baseline recording
 #
 # Exit codes:
@@ -283,7 +290,71 @@ test_container_integrity() {
     fi
 }
 
-# Run a single Boltz prediction test
+# Run a single prediction test via App-Boltz.pl (BV-BRC service script)
+run_appboltz_test() {
+    local test_name="$1"
+    local input_file="$2"
+    local test_output_dir="$OUTPUT_DIR/$test_name"
+    local use_msa="$3"
+
+    echo ""
+    echo -e "${CYAN}Running App-Boltz.pl: $test_name${NC}"
+
+    mkdir -p "$test_output_dir"
+
+    # Create params.json for this test
+    local params_file="$test_output_dir/params.json"
+    local use_msa_val="true"
+    if [ "$use_msa" != "true" ] || [ "$SKIP_MSA" = "true" ]; then
+        use_msa_val="false"
+    fi
+
+    # Note: App-Boltz.pl uses local file fallback when workspace API unavailable
+    # input_file path must be accessible inside container
+    cat > "$params_file" << EOF
+{
+    "input_file": "/data/$(basename "$input_file")",
+    "output_path": "/output",
+    "use_msa_server": $use_msa_val,
+    "diffusion_samples": 1,
+    "recycling_steps": 3,
+    "output_format": "mmcif",
+    "accelerator": "gpu"
+}
+EOF
+
+    echo "  Parameters: $params_file"
+    cat "$params_file"
+
+    # Run App-Boltz.pl with timing
+    local pred_start=$(date +%s)
+
+    # Set TMPDIR inside container for working directories
+    if $CONTAINER_CMD exec --nv \
+        -B "$TEST_DATA_DIR:/data:ro" \
+        -B "$test_output_dir:/output" \
+        -B "$params_file:/params.json:ro" \
+        --env TMPDIR=/tmp \
+        "$CONTAINER_PATH" \
+        perl /kb/module/service-scripts/App-Boltz.pl /params.json \
+        2>&1 | tee "$test_output_dir/appboltz.log"; then
+
+        local pred_end=$(date +%s)
+        local pred_time=$((pred_end - pred_start))
+
+        pass "$test_name App-Boltz.pl completed (${pred_time}s)"
+        log "$test_name runtime: ${pred_time}s"
+
+        # Validate output
+        validate_prediction_output "$test_name" "$test_output_dir"
+    else
+        fail "$test_name App-Boltz.pl failed"
+        log "$test_name: FAILED"
+        echo "  Check log: $test_output_dir/appboltz.log"
+    fi
+}
+
+# Run a single Boltz prediction test (direct CLI - for comparison)
 run_prediction_test() {
     local test_name="$1"
     local input_file="$2"
@@ -291,7 +362,7 @@ run_prediction_test() {
     local use_msa="$3"
 
     echo ""
-    echo -e "${CYAN}Running prediction: $test_name${NC}"
+    echo -e "${CYAN}Running boltz predict (direct): $test_name${NC}"
 
     mkdir -p "$test_output_dir"
 
@@ -361,12 +432,12 @@ validate_prediction_output() {
     fi
 }
 
-# Test Boltz predictions
-test_boltz_predictions() {
-    section "Boltz Prediction Tests"
+# Test App-Boltz.pl service script (MAIN FOCUS)
+test_appboltz_predictions() {
+    section "App-Boltz.pl Service Script Tests (Main Focus)"
 
     if [ "$QUICK_MODE" = "true" ]; then
-        skip "Prediction tests (--quick mode)"
+        skip "App-Boltz.pl prediction tests (--quick mode)"
         return 0
     fi
 
@@ -376,25 +447,52 @@ test_boltz_predictions() {
         return 1
     fi
 
-    # Test 1: Simple protein
+    echo "Testing App-Boltz.pl - the BV-BRC service script wrapper"
+    echo "This validates the full service workflow:"
+    echo "  1. Parameter parsing from JSON"
+    echo "  2. Input file handling (local fallback mode)"
+    echo "  3. Format detection (YAML/FASTA)"
+    echo "  4. Boltz execution with correct flags"
+    echo "  5. Output file generation"
+    echo ""
+
+    # Test 1: Simple protein via App-Boltz.pl
     if [ -f "$TEST_DATA_DIR/simple_protein.yaml" ]; then
-        run_prediction_test "simple_protein" "$TEST_DATA_DIR/simple_protein.yaml" "true"
+        run_appboltz_test "appboltz_simple_protein" "$TEST_DATA_DIR/simple_protein.yaml" "true"
     else
         warn "Test file missing: simple_protein.yaml"
     fi
 
-    # Test 2: Multimer
+    # Test 2: Multimer via App-Boltz.pl
     if [ -f "$TEST_DATA_DIR/multimer.yaml" ]; then
-        run_prediction_test "multimer" "$TEST_DATA_DIR/multimer.yaml" "true"
+        run_appboltz_test "appboltz_multimer" "$TEST_DATA_DIR/multimer.yaml" "true"
     else
         warn "Test file missing: multimer.yaml"
     fi
 
-    # Test 3: Protein-ligand (with affinity)
-    if [ -f "$TEST_DATA_DIR/protein_ligand.yaml" ]; then
-        run_prediction_test "protein_ligand" "$TEST_DATA_DIR/protein_ligand.yaml" "true"
+    # Test 3: FASTA format via App-Boltz.pl (tests format detection)
+    if [ -f "$TEST_DATA_DIR/simple_protein.fasta" ]; then
+        run_appboltz_test "appboltz_fasta_format" "$TEST_DATA_DIR/simple_protein.fasta" "true"
     else
-        warn "Test file missing: protein_ligand.yaml"
+        warn "Test file missing: simple_protein.fasta"
+    fi
+}
+
+# Test direct boltz CLI (optional comparison)
+test_boltz_direct() {
+    section "Direct Boltz CLI Tests (Optional Comparison)"
+
+    if [ "$QUICK_MODE" = "true" ]; then
+        skip "Direct Boltz CLI tests (--quick mode)"
+        return 0
+    fi
+
+    echo "Running direct 'boltz predict' for comparison with App-Boltz.pl"
+    echo ""
+
+    # Single direct test for baseline comparison
+    if [ -f "$TEST_DATA_DIR/simple_protein.yaml" ]; then
+        run_prediction_test "direct_simple_protein" "$TEST_DATA_DIR/simple_protein.yaml" "true"
     fi
 }
 
@@ -578,9 +676,10 @@ main() {
     detect_runtime
     test_gpu_access
     test_container_integrity
-    test_boltz_predictions
-    test_appservice_integration
+    test_appboltz_predictions      # MAIN FOCUS: App-Boltz.pl service script
+    test_appservice_integration    # Preflight and parameter validation
     test_workspace_connectivity
+    test_boltz_direct              # Optional: direct CLI comparison
     record_performance_baseline
     generate_report
 
