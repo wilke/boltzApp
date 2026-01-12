@@ -1,0 +1,14 @@
+{
+    "input_file": "/data/simple_protein.yaml",
+    "output_path": "/output",
+    "input_format": "auto",
+    "use_msa_server": true,
+    "diffusion_samples": 1,
+    "recycling_steps": 3,
+    "sampling_steps": 200,
+    "output_format": "mmcif",
+    "use_potentials": false,
+    "predict_affinity": false,
+    "write_full_pae": false,
+    "accelerator": "gpu"
+}
