@@ -203,8 +203,8 @@ test_gpu_access() {
             warn "Expected H100 GPU, found: $GPU_INFO"
         fi
 
-        # Check GPU memory
-        GPU_MEM=$($CONTAINER_CMD exec --nv "$CONTAINER_PATH" nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -1 || echo "0")
+        # Check GPU memory (parse first GPU's memory, trimming whitespace)
+        GPU_MEM=$($CONTAINER_CMD exec --nv "$CONTAINER_PATH" nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -1 | tr -d '[:space:]' || echo "0")
         if [ "${GPU_MEM:-0}" -ge 40000 ]; then
             pass "GPU memory sufficient: ${GPU_MEM}MB"
         else
@@ -301,6 +301,7 @@ run_appboltz_test() {
     echo -e "${CYAN}Running App-Boltz.pl: $test_name${NC}"
 
     mkdir -p "$test_output_dir"
+    mkdir -p "$test_output_dir/boltz_cache"
 
     # Create params.json for this test
     local params_file="$test_output_dir/params.json"
@@ -327,16 +328,23 @@ EOF
     cat "$params_file"
 
     # Run App-Boltz.pl with timing
+    # AppScript expects: app-service-url app-definition.json params.json
+    # For standalone testing, we use placeholder URL and the app spec from container
     local pred_start=$(date +%s)
 
     # Set TMPDIR inside container for working directories
+    # Bind writable cache directory for boltz model weights
     if $CONTAINER_CMD exec --nv \
         -B "$TEST_DATA_DIR:/data:ro" \
         -B "$test_output_dir:/output" \
         -B "$params_file:/params.json:ro" \
+        -B "$test_output_dir/boltz_cache:/root/.boltz" \
         --env TMPDIR=/tmp \
         "$CONTAINER_PATH" \
-        perl /kb/module/service-scripts/App-Boltz.pl /params.json \
+        perl /kb/module/service-scripts/App-Boltz.pl \
+            "http://localhost" \
+            /kb/module/app_specs/Boltz.json \
+            /params.json \
         2>&1 | tee "$test_output_dir/appboltz.log"; then
 
         local pred_end=$(date +%s)
@@ -365,6 +373,7 @@ run_prediction_test() {
     echo -e "${CYAN}Running boltz predict (direct): $test_name${NC}"
 
     mkdir -p "$test_output_dir"
+    mkdir -p "$test_output_dir/boltz_cache"
 
     # Build command
     local msa_flag=""
@@ -373,11 +382,13 @@ run_prediction_test() {
     fi
 
     # Run prediction with timing
+    # Bind writable cache directory for boltz model weights
     local pred_start=$(date +%s)
 
     if $CONTAINER_CMD exec --nv \
         -B "$TEST_DATA_DIR:/data:ro" \
         -B "$test_output_dir:/output" \
+        -B "$test_output_dir/boltz_cache:/root/.boltz" \
         "$CONTAINER_PATH" \
         boltz predict /data/$(basename "$input_file") \
         --out_dir /output \
@@ -514,14 +525,20 @@ test_appservice_integration() {
 EOF
 
     # Test preflight
+    # AppScript expects: --preflight <output_file> app-service-url app-definition.json params.json
     echo "Testing preflight resource estimation..."
 
     local preflight_output="$OUTPUT_DIR/preflight_output.json"
     if $CONTAINER_CMD exec \
         -B "$params_file:/params.json:ro" \
+        -B "$OUTPUT_DIR:/preflight_out" \
         "$CONTAINER_PATH" \
-        perl /kb/module/service-scripts/App-Boltz.pl --preflight /params.json \
-        2>/dev/null > "$preflight_output"; then
+        perl /kb/module/service-scripts/App-Boltz.pl \
+            --preflight /preflight_out/preflight_output.json \
+            "http://localhost" \
+            /kb/module/app_specs/Boltz.json \
+            /params.json \
+        2>/dev/null; then
 
         # Validate JSON output
         if python3 -c "import json; json.load(open('$preflight_output'))" 2>/dev/null; then
@@ -564,26 +581,71 @@ test_workspace_connectivity() {
     fi
     pass "Token file exists: $TOKEN_PATH"
 
-    # Test p3-login
-    echo "Testing workspace authentication..."
-    if $CONTAINER_CMD exec \
-        -B "$TOKEN_PATH:/root/.patric_token:ro" \
-        "$CONTAINER_PATH" \
-        p3-login --status 2>&1 | grep -qi "logged in\|authenticated\|valid"; then
-        pass "Workspace authentication successful"
-    else
-        warn "Workspace authentication status unclear (may still work)"
+    # Read token from file
+    local AUTH_TOKEN
+    AUTH_TOKEN=$(cat "$TOKEN_PATH")
+
+    if [ -z "$AUTH_TOKEN" ]; then
+        fail "Token file is empty"
+        return 1
+    fi
+    pass "Token loaded from file"
+
+    # Extract username from token path or token content for workspace path
+    # Token format typically includes user info, but we'll use a generic home path
+    local WORKSPACE_USER
+    WORKSPACE_USER=$(echo "$AUTH_TOKEN" | grep -oP 'un=\K[^|]+' 2>/dev/null || echo "")
+
+    if [ -z "$WORKSPACE_USER" ]; then
+        # Try to extract from token file path or default
+        WORKSPACE_USER="awilke"
     fi
 
-    # Test p3-ls
-    echo "Testing workspace listing..."
-    if $CONTAINER_CMD exec \
-        -B "$TOKEN_PATH:/root/.patric_token:ro" \
+    # Test workspace connectivity using Perl WorkspaceClientExt module
+    # This uses the P3_AUTH_TOKEN environment variable for authentication
+    echo "Testing workspace authentication via WorkspaceClientExt..."
+
+    local ws_result
+    ws_result=$($CONTAINER_CMD exec \
+        --env P3_AUTH_TOKEN="$AUTH_TOKEN" \
         "$CONTAINER_PATH" \
-        p3-ls 2>&1 | head -5; then
-        pass "Workspace listing works"
+        perl -e '
+use strict;
+use warnings;
+use Bio::P3::Workspace::WorkspaceClientExt;
+use JSON;
+
+my $ws = Bio::P3::Workspace::WorkspaceClientExt->new();
+my $user = $ENV{WS_USER} // "awilke";
+my $path = "/$user\@bvbrc/home/";
+
+eval {
+    my $result = $ws->ls({paths => [$path]});
+    if ($result && ref($result) eq "HASH" && exists $result->{$path}) {
+        my @items = map { $_->[0] } @{$result->{$path}};
+        print "SUCCESS: Found " . scalar(@items) . " items in workspace\n";
+        print "Items: " . join(", ", @items[0..4]) . (scalar(@items) > 5 ? "..." : "") . "\n";
+    } else {
+        print "SUCCESS: Workspace API responded\n";
+    }
+};
+if ($@) {
+    print "ERROR: $@\n";
+    exit 1;
+}
+' 2>&1)
+
+    echo "$ws_result"
+
+    if echo "$ws_result" | grep -q "SUCCESS"; then
+        pass "Workspace authentication and listing successful"
+        log "Workspace connectivity: OK"
+    elif echo "$ws_result" | grep -qi "error\|failed\|denied"; then
+        fail "Workspace connectivity failed"
+        log "Workspace connectivity: FAILED - $ws_result"
     else
-        warn "Workspace listing failed (check token and network)"
+        warn "Workspace connectivity status unclear"
+        log "Workspace connectivity: UNCLEAR - $ws_result"
     fi
 }
 
