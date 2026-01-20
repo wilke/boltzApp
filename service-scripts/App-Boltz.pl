@@ -284,7 +284,8 @@ sub upload_results {
                     $type = "binary";
                 }
 
-                $app->workspace->save_file_to_file($file, {}, $ws_file);
+                # Upload with overwrite enabled (5th param = 1)
+                $app->workspace->save_file_to_file($file, {}, $ws_file, $type, 1);
             } catch {
                 warn "Failed to upload $file: $_\n";
             };
