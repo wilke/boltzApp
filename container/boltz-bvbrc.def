@@ -34,7 +34,7 @@ From: dxkb/boltz-bvbrc:latest-gpu
 
     Environment:
     - GPU required for reasonable performance
-    - Model weights cached in /root/.boltz (bind mount for persistence)
+    - Model weights cached in /cache (bind mount for persistence)
     - Workspace files in /data
     - Uses standardized BV-BRC paths (/opt/patric-common/)
 
@@ -49,7 +49,8 @@ From: dxkb/boltz-bvbrc:latest-gpu
     # App-specific environment
     export KB_MODULE_DIR=/kb/module
     export IN_BVBRC_CONTAINER=1
-    export BOLTZ_CACHE=/root/.boltz
+    # Use /cache instead of /root/.boltz for Singularity read-only root compatibility
+    export BOLTZ_CACHE=/cache
 
 %runscript
     case "$1" in

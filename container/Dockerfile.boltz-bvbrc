@@ -29,6 +29,9 @@ ENV PATH=$KB_DEPLOYMENT/bin:$RT/bin:$PATH
 ENV KB_MODULE_DIR=/kb/module
 ENV IN_BVBRC_CONTAINER=1
 
+# Boltz cache directory - use /cache instead of /root/.boltz for Singularity compatibility
+ENV BOLTZ_CACHE=/cache
+
 # Add additional BV-BRC modules needed for AppService
 # dev_container now includes: p3_auth, p3_cli, p3_core, Workspace, app_service
 # Only clone seed_core and seed_gjo if needed for additional functionality
@@ -56,11 +59,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && $RT/bin/cpanm --notest Net::SSLeay IO::Socket::SSL LWP::Protocol::https REST::Client Class::Accessor \
     && rm -rf ~/.cpanm
 
-# Create directories for service components
+# Create directories for service components and cache
 RUN mkdir -p /kb/module/service-scripts \
              /kb/module/app_specs \
              /kb/module/scripts \
-             /kb/module/lib
+             /kb/module/lib \
+             /cache && \
+    chmod 777 /cache
 
 # Copy app_specs and service scripts (from build context)
 COPY app_specs/ /kb/module/app_specs/
