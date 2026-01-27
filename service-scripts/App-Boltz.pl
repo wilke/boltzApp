@@ -124,8 +124,12 @@ sub run_boltz {
     my $input_format = detect_input_format($local_input, $params->{input_format});
     print "Detected input format: $input_format\n";
 
+    # Find boltz binary: check PATH first, then P3_BOLTZ_PATH, then default
+    my $boltz_bin = find_boltz_binary();
+    print "Using boltz binary: $boltz_bin\n";
+
     # Build boltz command
-    my @cmd = ("boltz", "predict", $local_input);
+    my @cmd = ($boltz_bin, "predict", $local_input);
 
     # Output directory
     push @cmd, "--out_dir", $output_dir;
@@ -317,6 +321,43 @@ sub find_files {
         }
     }
     closedir($dh);
+}
+
+=head2 find_boltz_binary
+
+Find the boltz binary. Checks in order:
+1. boltz in PATH
+2. P3_BOLTZ_PATH environment variable
+3. Default path /opt/conda/bin
+
+=cut
+
+sub find_boltz_binary {
+    my $binary = "boltz";
+
+    # Check if boltz is in PATH by iterating PATH entries
+    if (my $path_env = $ENV{PATH}) {
+        my @path_dirs = split(/:/, $path_env);
+        for my $dir (@path_dirs) {
+            next unless $dir;  # Skip empty entries
+            my $full_path = "$dir/$binary";
+            if (-x $full_path && !-d $full_path) {
+                return $full_path;
+            }
+        }
+    }
+
+    # Check P3_BOLTZ_PATH environment variable
+    if (my $boltz_path = $ENV{P3_BOLTZ_PATH}) {
+        my $bin_path = "$boltz_path/$binary";
+        if (-x $bin_path) {
+            return $bin_path;
+        }
+    }
+
+    # Default to /opt/conda/bin
+    $ENV{P3_BOLTZ_PATH} //= "/opt/conda/bin";
+    return "$ENV{P3_BOLTZ_PATH}/$binary";
 }
 
 __END__
