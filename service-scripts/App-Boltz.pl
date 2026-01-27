@@ -103,7 +103,7 @@ sub run_boltz {
     print "Parameters: " . Dumper($params) . "\n";
 
     # Create working directories
-    my $work_dir = $ENV{TMPDIR} // "/tmp";
+    my $work_dir = $ENV{P3_WORKDIR} // $ENV{TMPDIR} // "/tmp";
     my $input_dir = "$work_dir/input";
     my $output_dir = "$work_dir/output";
 
