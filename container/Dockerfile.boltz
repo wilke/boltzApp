@@ -81,7 +81,7 @@ RUN pip3 install --no-cache-dir -e .
 RUN mkdir -p /data /output /cache
 
 # Set environment variables
-ENV BOLTZ_CACHE=/root/.boltz
+ENV BOLTZ_CACHE=/cache
 ENV PYTHONUNBUFFERED=1
 
 # Working directory for user data
