@@ -110,9 +110,10 @@
         "memory": "64G",
         "runtime": 7200,
         "storage": "50G",
-        "policy": {
-            "gpu": 1,
-            "gpu_type": "a100"
+        "policy_data": {
+            "gpu_count": 1,
+            "partition": "gpu2",
+            "constraint": "A100|H100|H200"
         }
     }
 }
