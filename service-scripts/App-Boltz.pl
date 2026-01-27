@@ -100,7 +100,7 @@ sub run_boltz {
     my ($app, $app_def, $raw_params, $params) = @_;
 
     print "Starting Boltz structure prediction\n";
-    print "Parameters: " . Dumper($params) . "\n";
+    print STDERR "Parameters: " . Dumper($params) . "\n" if $ENV{P3_DEBUG};
 
     # Create working directories
     my $work_dir = $ENV{TMPDIR} // "/tmp";
