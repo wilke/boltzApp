@@ -83,9 +83,10 @@ sub preflight {
         memory => $memory,
         runtime => $runtime,
         storage => $storage,
-        policy => {
-            gpu => 1,
-            gpu_type => "a100"
+        policy_data => {
+            gpu_count => 1,
+            partition => 'gpu2',
+            constraint => 'A100|H100|H200'
         }
     };
 }
