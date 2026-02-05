@@ -243,7 +243,8 @@ sub download_workspace_file {
     # Use workspace API to download
     if ($app && $app->can('workspace')) {
         try {
-            $app->workspace->download_file($ws_path, $local_path);
+            # use_shock=1 required for files > 1KB (stored in Shock automatically)
+            $app->workspace->download_file($ws_path, $local_path, 1);
         } catch {
             die "Failed to download $ws_path: $_\n";
         };
@@ -283,12 +284,12 @@ sub upload_results {
             try {
                 # Determine file type for workspace
                 my $type = "txt";
-                if ($file =~ /\.cif$/i) {
-                    $type = "structure";
-                } elsif ($file =~ /\.pdb$/i) {
+                if ($file =~ /\.(pdb|cif|mmcif)$/i) {
                     $type = "structure";
                 } elsif ($file =~ /\.json$/i) {
                     $type = "json";
+                } elsif ($file =~ /\.(fasta|fa|faa)$/i) {
+                    $type = "fasta";
                 } elsif ($file =~ /\.npz$/i) {
                     $type = "binary";
                 }
