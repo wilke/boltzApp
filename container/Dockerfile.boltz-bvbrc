@@ -56,7 +56,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libssl-dev \
         zlib1g-dev \
     && rm -rf /var/lib/apt/lists/* \
-    && $RT/bin/cpanm --notest Net::SSLeay IO::Socket::SSL LWP::Protocol::https REST::Client Class::Accessor \
+    && $RT/bin/cpanm --notest Net::SSLeay IO::Socket::SSL LWP::Protocol::https REST::Client Class::Accessor Carp::Always \
     && rm -rf ~/.cpanm
 
 # Create directories for service components and cache
