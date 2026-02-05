@@ -103,6 +103,13 @@
             "required": 1,
             "label": "Output Folder",
             "desc": "Workspace folder where prediction results will be saved."
+        },
+        {
+            "id": "output_file",
+            "type": "wsfile",
+            "required": 0,
+            "label": "Output File",
+            "desc": "Optional output file path. Not used by this app (outputs go to output_path folder)."
         }
     ],
     "preflight": {
